@@ -27,6 +27,12 @@
 #include <stdarg.h>
 #include "compiler.h"
 
+#define LOGGING_STATS 1
+
+#ifdef LOGGING_STATS
+#define DEFAULT_LOGGING_INTERVAL 2048
+extern int log_interval;
+#endif
 int  tlog_open(const char *, int, int);
 void tlog_close(void);
 void tlog_precious(int);

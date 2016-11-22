@@ -54,6 +54,12 @@
 #define TD_CTL_SEND_TIMEOUT     10
 #define TD_CTL_SEND_BUFSZ       ((size_t)4096)
 
+#ifdef LOGGING_STATS
+#define LOGFILE_PATH "/etc/tapdisk-config.txt"
+#define LOGGING_INTERVAL "/* Please choose interval in powers of2 */ \n logging interval=2048 \n"
+int log_interval = DEFAULT_LOGGING_INTERVAL;
+#endif
+
 #define DBG(_f, _a...)             tlog_syslog(TLOG_DBG, _f, ##_a)
 #define ERR(err, _f, _a...)        tlog_error(err, _f, ##_a)
 #define INFO(_f, _a...)            tlog_syslog(TLOG_INFO, "control: " _f, ##_a)
@@ -1085,7 +1091,12 @@ tapdisk_control_xenblkif_connect(
     const char *pool;
     size_t len;
     int err;
-	int minor = -1;
+    int minor = -1;
+#ifdef LOGGING_STATS 
+    int fd = 0, count = 0, log_len = 0;
+    char buffer[128];
+    char *buf_ptr = NULL;
+#endif
 
     ASSERT(conn);
     ASSERT(request);
@@ -1117,11 +1128,37 @@ tapdisk_control_xenblkif_connect(
 
 out:
 	response->cookie = request->cookie;
-    if (!err)
+    if (!err){
         response->type = TAPDISK_MESSAGE_XENBLKIF_CONNECT_RSP;
-    else
-		EPRINTF("VBD %d failed to connect to the shared ring: %s\n",
-				minor, strerror(-err));
+        DPRINTF("Before entering logging_statsfor  VBD %d domid=%d,\n", vbd->uuid, blkif->domid);
+#ifdef LOGGING_STATS
+        DPRINTF("After entering logging_statsfor  VBD %d domid=%d,\n", vbd->uuid, blkif->domid);
+        fd = open(LOGFILE_PATH, O_CREAT|O_RDWR, 0777);
+        if (fd < 0) {
+	   DPRINTF("VBD %d failed to open the log file\n", minor);
+           return err;
+        }
+        
+        log_len = sizeof(LOGGING_INTERVAL);  
+        count = read(fd, buffer, log_len);
+        if (count != log_len) {
+           count = write(fd, LOGGING_INTERVAL, log_len);
+           if (count != log_len)
+               EPRINTF("VBD %d failed writing in the log file\n", minor);
+              
+           return err;
+        } else {
+                buf_ptr = strchr(buffer, '=');
+                if(buf_ptr) {
+                   buf_ptr++;
+                log_interval = atoi(buf_ptr);
+                EPRINTF("VBD %d the logging interval is %d \n", minor, log_interval);
+         }   
+        }
+#endif
+    } else
+	EPRINTF("VBD %d failed to connect to the shared ring: %s\n",
+		 minor, strerror(-err));
 
     return err;
 }
